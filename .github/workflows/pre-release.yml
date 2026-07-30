@@ -1,0 +1,100 @@
+name: Build debug pre-release
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rolling-pre-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and publish debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ColorOSPermissionWhitelistHook-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Update rolling pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          APK_PATH: app/build/outputs/apk/debug/app-debug.apk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh api "repos/${REPOSITORY}/git/ref/tags/pre-release" >/dev/null 2>&1; then
+            gh api \
+              --method PATCH \
+              "repos/${REPOSITORY}/git/refs/tags/pre-release" \
+              -f sha="${GITHUB_SHA}" \
+              -F force=true \
+              >/dev/null
+          else
+            gh api \
+              --method POST \
+              "repos/${REPOSITORY}/git/refs" \
+              -f ref="refs/tags/pre-release" \
+              -f sha="${GITHUB_SHA}" \
+              >/dev/null
+          fi
+
+          release_title="Pre-release debug #${GITHUB_RUN_NUMBER}"
+          release_notes="Automated debug build from commit ${GITHUB_SHA}."
+
+          if gh release view pre-release --repo "${REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload \
+              pre-release \
+              "${APK_PATH}" \
+              --clobber \
+              --repo "${REPOSITORY}"
+            gh release edit \
+              pre-release \
+              --prerelease \
+              --title "${release_title}" \
+              --notes "${release_notes}" \
+              --repo "${REPOSITORY}"
+          else
+            gh release create \
+              pre-release \
+              "${APK_PATH}" \
+              --verify-tag \
+              --prerelease \
+              --title "${release_title}" \
+              --notes "${release_notes}" \
+              --repo "${REPOSITORY}"
+          fi
