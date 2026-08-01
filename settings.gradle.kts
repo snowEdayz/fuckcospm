@@ -11,9 +11,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://api.xposed.info/" }
+        maven { url = uri("https://api.xposed.info/") }
     }
 }
 
-rootProject.name = "ColorOSPermissionWhitelistHook"
+rootProject.name = "FuckCospm"
 include(":app")
