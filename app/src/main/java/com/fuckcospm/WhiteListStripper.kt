@@ -27,6 +27,12 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * 开机兜底 OplusSecurityPermissionManager.readActivityStartWhiteList()：
  * 系统开机加载白名单完成后，主动清洗内存缓存中残留的目标包条目，
  * 并立即写盘（writeActivityStartWhiteList），保证持久化文件同步干净。
+ *
+ * 系统 App 特判 OplusAppStartConfirmManager.isSystemAppOrSameApp()：
+ * 弹确认框的总入口 checkStartActivityForConfirm 在检查白名单之前，
+ * 会先对系统 App（FLAG_SYSTEM）调用方/目标方直接放行（不弹框）。
+ * com.heytap.market 是系统 App，剥离白名单对它不生效，
+ * 因此强制使该特判对目标包返回 false，使检查链继续走到白名单检查。
  */
 object WhiteListStripper {
 
@@ -49,6 +55,7 @@ object WhiteListStripper {
 
     private const val CLASS_MANAGER = "com.android.server.am.OplusSecurityPermissionManager"
     private const val CLASS_WHITE_LIST = "$CLASS_MANAGER\$ActivityStartWhiteList"
+    private const val CLASS_CONFIRM_MANAGER = "com.android.server.wm.OplusAppStartConfirmManager"
 
     fun hookAll(lpparam: XC_LoadPackage.LoadPackageParam) {
         hookPutActivityStartWhiteList(lpparam.classLoader)
@@ -57,6 +64,7 @@ object WhiteListStripper {
         hookPutUserSetWhiteList(lpparam.classLoader)
         hookCheckAllowStartActivity(lpparam.classLoader)
         hookBootCleanup(lpparam.classLoader)
+        hookIsSystemAppOrSameApp(lpparam.classLoader)
     }
 
     // ── 入口 1：系统服务收到白名单更新（binder 调用的第一站） ──────────────
@@ -265,6 +273,37 @@ object WhiteListStripper {
         }
         if (changed) {
             log("boot cleanup: removed entries from mUserSetList")
+        }
+    }
+
+    // ── 入口 7（系统 App 特判绕行）：让目标包走到白名单检查 ──────────────
+    // checkStartActivityForConfirm 在调用 checkAllowStartActivity 之前，
+    // 先执行 isSystemAppOrSameApp：目标/调用方是系统 App 时直接放行不弹框。
+    // com.heytap.market 是系统 App（FLAG_SYSTEM），剥离白名单不会生效，
+    // 因此对该方法返回 true 且涉及目标包时强制改写为 false。
+    private fun hookIsSystemAppOrSameApp(classLoader: ClassLoader) {
+        try {
+            XposedHelpers.findAndHookMethod(
+                CLASS_CONFIRM_MANAGER, classLoader, "isSystemAppOrSameApp",
+                Int::class.javaPrimitiveType, String::class.java, ActivityInfo::class.java,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if ((param.result as? Boolean) != true) return
+                        val callerPkg = param.args[1] as? String
+                        val aInfo = param.args[2] as? ActivityInfo
+                        val targetPkg = aInfo?.applicationInfo?.packageName
+                        if ((callerPkg != null && callerPkg in TARGET_PACKAGES) ||
+                            (targetPkg != null && targetPkg in TARGET_PACKAGES)
+                        ) {
+                            log("isSystemAppOrSameApp bypassed: caller=$callerPkg target=$targetPkg -> continue to white-list check")
+                            param.result = false
+                        }
+                    }
+                }
+            )
+            log("hooked isSystemAppOrSameApp")
+        } catch (t: Throwable) {
+            log("hook isSystemAppOrSameApp failed: $t")
         }
     }
 
