@@ -33,4 +33,5 @@ android {
 
 dependencies {
     compileOnly("de.robv.android.xposed:api:82")
+    compileOnly("de.robv.android.xposed:api:82:sources")
 }
