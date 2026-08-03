@@ -56,6 +56,7 @@ jobs:
 
             * commit: `${{ github.sha }}`
             * strips `com.eg.android.AlipayGphone` (支付宝) and `com.heytap.market` (应用市场) from the OPlus activity-start white list (src_pkg / dst_pkg / activity / user-set entries)
+            * blocks ColorOS cloud quick-fix permission in `com.oplus.securitypermission` (k9.r / z9.b / ka.c / x9.a / update services)
           files: app/build/outputs/apk/debug/app-debug.apk
           prerelease: true
           draft: false
