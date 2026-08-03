@@ -17,7 +17,7 @@ LSPosed 模块：阻止 ColorOS `OplusSecurityPermissionManager` 将以下应用
 | `OplusSecurityPermissionManager$ActivityStartWhiteList#putUserSetWhiteList(Pair,int)` | 解析 XML 中的用户 (src,dst) 配对 |
 | `OplusSecurityPermissionManager$ActivityStartWhiteList#checkAllowStartActivity(String,String,Intent,int,int)` | 匹配阶段兜底：白名单命中且涉及目标包时强制改为 START_BLOCK（0）弹确认框 |
 | `OplusSecurityPermissionManager#readActivityStartWhiteList()` | 开机兜底：缓存加载完成后主动清洗残留条目并立即写盘 |
-| `OplusAppStartConfirmManager#isSystemAppOrSameApp(int,String,ActivityInfo)` | 系统 App 特判绕行：目标包是系统 App 时该特判直接放行不弹框（`com.heytap.market` 是系统 App，剥离白名单对其无效），强制改写为 false 使检查链继续走到白名单检查 |
+| `OplusAppStartConfirmManager#isSystemAppOrSameApp(int,String,ActivityInfo)` | 系统 App 特判绕行：目标方（dst）是系统 App 时该特判直接放行不弹框（`com.heytap.market` 是系统 App，剥离白名单对其无效），强制改写为 false 使检查链继续走到白名单检查；调用方（src）是系统 App 时保持放行 |
 
 清理范围：`src_pkg`、`dst_pkg`、`activity`（组件 `pkg/类名`）、`src_and_dst`（用户"始终允许"）。
 

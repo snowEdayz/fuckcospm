@@ -281,7 +281,8 @@ object WhiteListStripper {
     // checkStartActivityForConfirm 在调用 checkAllowStartActivity 之前，
     // 先执行 isSystemAppOrSameApp：目标/调用方是系统 App 时直接放行不弹框。
     // com.heytap.market 是系统 App（FLAG_SYSTEM），剥离白名单不会生效，
-    // 因此对该方法返回 true 且涉及目标包时强制改写为 false。
+    // 因此对该方法返回 true 且目标方（dst）为目标包时强制改写为 false。
+    // 注意：调用方（src）是系统 App 时保持原样放行，不弹框。
     private fun hookIsSystemAppOrSameApp(classLoader: ClassLoader) {
         try {
             XposedHelpers.findAndHookMethod(
@@ -290,13 +291,10 @@ object WhiteListStripper {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         if ((param.result as? Boolean) != true) return
-                        val callerPkg = param.args[1] as? String
                         val aInfo = param.args[2] as? ActivityInfo
                         val targetPkg = aInfo?.applicationInfo?.packageName
-                        if ((callerPkg != null && callerPkg in TARGET_PACKAGES) ||
-                            (targetPkg != null && targetPkg in TARGET_PACKAGES)
-                        ) {
-                            log("isSystemAppOrSameApp bypassed: caller=$callerPkg target=$targetPkg -> continue to white-list check")
+                        if (targetPkg != null && targetPkg in TARGET_PACKAGES) {
+                            log("isSystemAppOrSameApp bypassed: target=$targetPkg -> continue to white-list check")
                             param.result = false
                         }
                     }
