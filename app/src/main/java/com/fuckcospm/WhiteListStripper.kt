@@ -220,38 +220,50 @@ object WhiteListStripper {
 
     private fun scrubStringList(value: Any?, where: String) {
         if (value !is MutableList<*>) return
-        val filtered = ArrayList(value.filter { item -> item !is String || !TARGET_PACKAGES.contains(item) })
-        if (filtered.size != value.size) {
-            value.clear()
-            value.addAll(filtered)
+        var changed = false
+        val it = value.listIterator()
+        while (it.hasNext()) {
+            val item = it.next() ?: continue
+            if (item is String && item in TARGET_PACKAGES) {
+                it.remove()
+                changed = true
+            }
+        }
+        if (changed) {
             log("boot cleanup: removed entries from mPresetList[$where]")
         }
     }
 
     private fun scrubComponentList(value: Any?) {
         if (value !is MutableList<*>) return
-        val filtered = ArrayList(value.filter { item ->
-            val component = item as? String
-            component == null || TARGET_PACKAGES.none { target -> component == target || component.startsWith("$target/") }
-        })
-        if (filtered.size != value.size) {
-            value.clear()
-            value.addAll(filtered)
+        var changed = false
+        val it = value.listIterator()
+        while (it.hasNext()) {
+            val item = it.next() ?: continue
+            if (item is String && TARGET_PACKAGES.any { target -> item == target || item.startsWith("$target/") }) {
+                it.remove()
+                changed = true
+            }
+        }
+        if (changed) {
             log("boot cleanup: removed entries from mPresetList[activity]")
         }
     }
 
     private fun scrubPairList(value: Any?) {
         if (value !is MutableList<*>) return
-        val filtered = ArrayList(value.filter { item ->
-            val pair = item as? android.util.Pair<*, *>
-            val src = pair?.first as? String
-            val dst = pair?.second as? String
-            !((src != null && TARGET_PACKAGES.contains(src)) || (dst != null && TARGET_PACKAGES.contains(dst)))
-        })
-        if (filtered.size != value.size) {
-            value.clear()
-            value.addAll(filtered)
+        var changed = false
+        val it = value.listIterator()
+        while (it.hasNext()) {
+            val pair = it.next() as? android.util.Pair<*, *> ?: continue
+            val src = pair.first as? String
+            val dst = pair.second as? String
+            if ((src != null && src in TARGET_PACKAGES) || (dst != null && dst in TARGET_PACKAGES)) {
+                it.remove()
+                changed = true
+            }
+        }
+        if (changed) {
             log("boot cleanup: removed entries from mUserSetList")
         }
     }
