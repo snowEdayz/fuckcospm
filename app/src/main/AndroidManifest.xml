@@ -9,6 +9,9 @@
             android:name="xposedmodule"
             android:value="true" />
         <meta-data
+            android:name="xposedentrypoint"
+            android:value="com.fuckcospm.MainHook" />
+        <meta-data
             android:name="xposeddescription"
             android:value="记录 COSPM 应用启动白名单推送" />
         <meta-data
