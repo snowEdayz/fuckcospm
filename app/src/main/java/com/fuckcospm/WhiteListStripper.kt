@@ -3,6 +3,7 @@ package com.fuckcospm
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.os.UserHandle
 import android.util.Pair
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -24,10 +25,12 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * 并拦截匹配阶段 ActivityStartWhiteList.checkAllowStartActivity(...)：
  * 即使目标包已在模块激活前就存在于内存缓存/持久化文件中，
  * 白名单命中（返回 -1）也会被改写为 0（START_BLOCK），强制弹确认框。
+ * 用户保存的"始终允许"偏好（mUserSetList 命中）遵循用户选择，不干预。
  *
  * 开机兜底 OplusSecurityPermissionManager.readActivityStartWhiteList()：
  * 系统开机加载白名单完成后，主动清洗内存缓存中残留的目标包条目，
  * 并立即写盘（writeActivityStartWhiteList），保证持久化文件同步干净。
+ * 同样只清洗预置表（mPresetList），用户偏好（mUserSetList）保留。
  *
  * 系统 App 特判 OplusAppStartConfirmManager.isSystemAppOrSameApp()：
  * 弹确认框的总入口 checkStartActivityForConfirm 在检查白名单之前，
@@ -48,7 +51,6 @@ object WhiteListStripper {
     private const val KEY_SRC_PKG = "src_pkg"
     private const val KEY_DST_PKG = "dst_pkg"
     private const val KEY_ACTIVITY = "activity"
-    private const val KEY_SRC_AND_DST = "src_and_dst"
 
     // 匹配阶段返回值（与 OplusSecurityPermissionManager 中常量一致）
     private const val TYPE_DEFAULT = -1    // 白名单命中，放行
@@ -62,7 +64,6 @@ object WhiteListStripper {
         hookPutActivityStartWhiteList(lpparam.classLoader)
         hookPutWhiteList(lpparam.classLoader)
         hookPutPresetWhiteList(lpparam.classLoader)
-        hookPutUserSetWhiteList(lpparam.classLoader)
         hookCheckAllowStartActivity(lpparam.classLoader)
         hookBootCleanup(lpparam.classLoader)
         hookIsSystemAppOrSameApp(lpparam.classLoader)
@@ -129,32 +130,6 @@ object WhiteListStripper {
         }
     }
 
-    // ── 入口 4：解析 XML / 用户设置中的 (src, dst) 配对条目 ─────────────────
-    private fun hookPutUserSetWhiteList(classLoader: ClassLoader) {
-        try {
-            XposedHelpers.findAndHookMethod(
-                CLASS_WHITE_LIST, classLoader, "putUserSetWhiteList",
-                Pair::class.java, Int::class.javaPrimitiveType,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val pair = param.args[0] as? Pair<*, *> ?: return
-                        val src = pair.first as? String
-                        val dst = pair.second as? String
-                        if ((src != null && TARGET_PACKAGES.contains(src)) ||
-                            (dst != null && TARGET_PACKAGES.contains(dst))
-                        ) {
-                            log("dropped user-set entry: src=$src dst=$dst")
-                            param.result = null
-                        }
-                    }
-                }
-            )
-            log("hooked putUserSetWhiteList")
-        } catch (t: Throwable) {
-            log("hook putUserSetWhiteList failed: $t")
-        }
-    }
-
     // ── 入口 5（兜底）：匹配阶段，命中白名单且涉及目标包时强制弹框 ────────
     private fun hookCheckAllowStartActivity(classLoader: ClassLoader) {
         try {
@@ -166,14 +141,17 @@ object WhiteListStripper {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         val result = param.result as? Int ?: return
                         if (result != TYPE_DEFAULT) return
-                        val caller = param.args[0] as? String
-                        val callee = param.args[1] as? String
-                        if ((caller != null && TARGET_PACKAGES.contains(caller)) ||
-                            (callee != null && TARGET_PACKAGES.contains(callee))
-                        ) {
-                            log("white-list match blocked: caller=$caller callee=$callee -> START_BLOCK")
-                            param.result = TYPE_START_BLOCK
+                        val caller = param.args[0] as? String ?: return
+                        val callee = param.args[1] as? String ?: return
+                        if (!TARGET_PACKAGES.contains(caller) && !TARGET_PACKAGES.contains(callee)) return
+                        // 用户保存的"始终允许"偏好：遵循，不干预
+                        val callerUid = param.args[3] as? Int ?: return
+                        if (isUserSetHit(param.thisObject, caller, callee, callerUid)) {
+                            log("user preference honored: caller=$caller callee=$callee")
+                            return
                         }
+                        log("white-list match blocked: caller=$caller callee=$callee -> START_BLOCK")
+                        param.result = TYPE_START_BLOCK
                     }
                 }
             )
@@ -181,6 +159,22 @@ object WhiteListStripper {
         } catch (t: Throwable) {
             log("hook checkAllowStartActivity failed: $t")
         }
+    }
+
+    // 用户保存的"始终允许"配对（mUserSetList[userId] 含 (caller, callee)）是否命中
+    private fun isUserSetHit(wl: Any, caller: String, callee: String, callerUid: Int): Boolean {
+        try {
+            val userId = UserHandle.getUserId(callerUid)
+            val userSetList = XposedHelpers.getObjectField(wl, "mUserSetList") as? Map<*, *> ?: return false
+            val list = userSetList[userId] as? List<*> ?: return false
+            for (p in list) {
+                val pair = p as? Pair<*, *> ?: continue
+                if (pair.first == caller && pair.second == callee) return true
+            }
+        } catch (t: Throwable) {
+            log("isUserSetHit failed: $t")
+        }
+        return false
     }
 
     // ── 入口 6（开机兜底）：开机白名单加载完成后主动清洗并落盘 ────────────
@@ -214,17 +208,13 @@ object WhiteListStripper {
         }
     }
 
-    // 清洗内存缓存：mPresetList（src_pkg/dst_pkg/activity）+ mUserSetList（Pair 配对）
+    // 清洗内存缓存：仅 mPresetList（src_pkg/dst_pkg/activity）
+    // 用户保存的"始终允许"偏好（mUserSetList）遵循用户选择，不清洗
     private fun scrubCachedWhiteList(cached: Any) {
         val presetList = XposedHelpers.getObjectField(cached, "mPresetList") as? Map<*, *> ?: return
         scrubStringList(presetList[KEY_SRC_PKG], "src_pkg")
         scrubStringList(presetList[KEY_DST_PKG], "dst_pkg")
         scrubComponentList(presetList[KEY_ACTIVITY])
-
-        val userSetList = XposedHelpers.getObjectField(cached, "mUserSetList") as? Map<*, *> ?: return
-        for (userList in userSetList.values) {
-            scrubPairList(userList)
-        }
     }
 
     private fun scrubStringList(value: Any?, where: String) {
@@ -259,24 +249,6 @@ object WhiteListStripper {
         }
     }
 
-    private fun scrubPairList(value: Any?) {
-        if (value !is MutableList<*>) return
-        var changed = false
-        val it = value.listIterator()
-        while (it.hasNext()) {
-            val pair = it.next() as? android.util.Pair<*, *> ?: continue
-            val src = pair.first as? String
-            val dst = pair.second as? String
-            if ((src != null && src in TARGET_PACKAGES) || (dst != null && dst in TARGET_PACKAGES)) {
-                it.remove()
-                changed = true
-            }
-        }
-        if (changed) {
-            log("boot cleanup: removed entries from mUserSetList")
-        }
-    }
-
     // ── 入口 7（系统 App 特判绕行）：让目标包走到白名单检查 ──────────────
     // checkStartActivityForConfirm 在调用 checkAllowStartActivity 之前，
     // 先执行 isSystemAppOrSameApp：目标/调用方是系统 App 时直接放行不弹框。
@@ -306,7 +278,8 @@ object WhiteListStripper {
         }
     }
 
-    // ── Bundle 清理：src_pkg / dst_pkg / activity / src_and_dst ─────────────
+    // ── Bundle 清理：src_pkg / dst_pkg / activity ──────────────────────────
+    // 用户"始终允许"配对（src_and_dst / mUserSetList）遵循用户偏好，不清洗
     private fun stripFromBundle(bundle: Bundle, where: String) {
         var changed = false
 
@@ -331,14 +304,6 @@ object WhiteListStripper {
                 log("$where: removed entries from activity")
                 changed = true
             }
-        }
-
-        // 用户"始终允许"配对：2 元素 [caller, callee]
-        val srcAndDst = bundle.getStringArrayList(KEY_SRC_AND_DST)
-        if (srcAndDst != null && srcAndDst.any { TARGET_PACKAGES.contains(it) }) {
-            bundle.remove(KEY_SRC_AND_DST)
-            log("$where: removed src_and_dst entry")
-            changed = true
         }
 
         if (changed) {
