@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FuckCosPM</string>
+    <string name="xposed_description">从 Activity 启动白名单（src_pkg/dst_pkg）中移除支付宝与应用市场</string>
+</resources>
