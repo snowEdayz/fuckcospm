@@ -23,6 +23,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  * 并拦截匹配阶段 ActivityStartWhiteList.checkAllowStartActivity(...)：
  * 即使目标包已在模块激活前就存在于内存缓存/持久化文件中，
  * 白名单命中（返回 -1）也会被改写为 0（START_BLOCK），强制弹确认框。
+ *
+ * 开机兜底 OplusSecurityPermissionManager.readActivityStartWhiteList()：
+ * 系统开机加载白名单完成后，主动清洗内存缓存中残留的目标包条目，
+ * 并立即写盘（writeActivityStartWhiteList），保证持久化文件同步干净。
  */
 object WhiteListStripper {
 
@@ -52,6 +56,7 @@ object WhiteListStripper {
         hookPutPresetWhiteList(lpparam.classLoader)
         hookPutUserSetWhiteList(lpparam.classLoader)
         hookCheckAllowStartActivity(lpparam.classLoader)
+        hookBootCleanup(lpparam.classLoader)
     }
 
     // ── 入口 1：系统服务收到白名单更新（binder 调用的第一站） ──────────────
@@ -166,6 +171,88 @@ object WhiteListStripper {
             log("hooked checkAllowStartActivity")
         } catch (t: Throwable) {
             log("hook checkAllowStartActivity failed: $t")
+        }
+    }
+
+    // ── 入口 6（开机兜底）：开机白名单加载完成后主动清洗并落盘 ────────────
+    // 系统开机时序：OplusSecurityPermissionManager.init() -> handler MSG 1
+    // -> readActivityStartWhiteList()（后台线程加载缓存）
+    private fun hookBootCleanup(classLoader: ClassLoader) {
+        try {
+            XposedHelpers.findAndHookMethod(
+                CLASS_MANAGER, classLoader, "readActivityStartWhiteList",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val mgr = param.thisObject ?: return
+                            val cached = XposedHelpers.getObjectField(mgr, "mCachedActivityStartWhiteList")
+                            val lock = XposedHelpers.getObjectField(mgr, "mActivityStartLock")
+                            synchronized(lock) {
+                                scrubCachedWhiteList(cached)
+                            }
+                            // 立即写盘：持久化文件中的残留条目一并清洗
+                            XposedHelpers.callMethod(mgr, "writeActivityStartWhiteList")
+                            log("boot cleanup done, white list persisted")
+                        } catch (t: Throwable) {
+                            log("boot cleanup failed: $t")
+                        }
+                    }
+                }
+            )
+            log("hooked readActivityStartWhiteList (boot cleanup)")
+        } catch (t: Throwable) {
+            log("hook readActivityStartWhiteList failed: $t")
+        }
+    }
+
+    // 清洗内存缓存：mPresetList（src_pkg/dst_pkg/activity）+ mUserSetList（Pair 配对）
+    private fun scrubCachedWhiteList(cached: Any) {
+        val presetList = XposedHelpers.getObjectField(cached, "mPresetList") as? Map<*, *> ?: return
+        scrubStringList(presetList[KEY_SRC_PKG], "src_pkg")
+        scrubStringList(presetList[KEY_DST_PKG], "dst_pkg")
+        scrubComponentList(presetList[KEY_ACTIVITY])
+
+        val userSetList = XposedHelpers.getObjectField(cached, "mUserSetList") as? Map<*, *> ?: return
+        for (userList in userSetList.values) {
+            scrubPairList(userList)
+        }
+    }
+
+    private fun scrubStringList(value: Any?, where: String) {
+        if (value !is MutableList<*>) return
+        val filtered = ArrayList(value.filter { item -> item !is String || !TARGET_PACKAGES.contains(item) })
+        if (filtered.size != value.size) {
+            value.clear()
+            value.addAll(filtered)
+            log("boot cleanup: removed entries from mPresetList[$where]")
+        }
+    }
+
+    private fun scrubComponentList(value: Any?) {
+        if (value !is MutableList<*>) return
+        val filtered = ArrayList(value.filter { item ->
+            val component = item as? String
+            component == null || TARGET_PACKAGES.none { target -> component == target || component.startsWith("$target/") }
+        })
+        if (filtered.size != value.size) {
+            value.clear()
+            value.addAll(filtered)
+            log("boot cleanup: removed entries from mPresetList[activity]")
+        }
+    }
+
+    private fun scrubPairList(value: Any?) {
+        if (value !is MutableList<*>) return
+        val filtered = ArrayList(value.filter { item ->
+            val pair = item as? android.util.Pair<*, *>
+            val src = pair?.first as? String
+            val dst = pair?.second as? String
+            !((src != null && TARGET_PACKAGES.contains(src)) || (dst != null && TARGET_PACKAGES.contains(dst)))
+        })
+        if (filtered.size != value.size) {
+            value.clear()
+            value.addAll(filtered)
+            log("boot cleanup: removed entries from mUserSetList")
         }
     }
 
