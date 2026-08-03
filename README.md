@@ -1,17 +1,11 @@
 # FuckCOSPM
 
-LSPosed 模块，两个功能：
+LSPosed 模块：阻止 ColorOS `OplusSecurityPermissionManager` 将以下应用加入"活动启动白名单"：
 
-1. 阻止 ColorOS `OplusSecurityPermissionManager` 将以下应用加入"活动启动白名单"：
-   - `com.eg.android.AlipayGphone`（支付宝）
-   - `com.heytap.market`（OPPO 应用市场）
+- `com.eg.android.AlipayGphone`（支付宝）
+- `com.heytap.market`（OPPO 应用市场）
 
-   即当系统收到白名单更新（云端/本地预置推送、用户勾选"始终允许"）时，将这两个包从白名单数据中剥离，使其每次被拉起时都弹确认框。
-
-2. 阻止 ColorOS "安全权限管理"（`com.oplus.securitypermission`）的**云控自动修改权限**机制（机制 1）：
-   - 数据源：OPPO ROM 云控 Provider `content://com.oplus.romupdate.provider.db/update_list`（filtername=`safe_suggest_permission_list`）
-   - 快捷修复权限 `z9.b`（QuickFixPermissionManager）会解析云端 `<quick_fix_permission>` 规则，通过 `AppOps.setUidMode` / `grantRuntimePermission` 自动修改已安装应用的权限模式（仅限权限处于默认状态时）
-   - 模块在 App 进程内阻断：云控 XML 读取（`k9.r` Q/S/W/I）、快捷修复（`z9.b` g/h）、建议权限写库（`ka.c` d）、预置权限写 SP（`x9.a` f）、以及两个更新服务（`SuggestPermissionUpdateService` / `PresetPermissionUpdateService`）入口
+即当系统收到白名单更新（云端/本地预置推送、用户勾选"始终允许"）时，将这两个包从白名单数据中剥离，使其每次被拉起时都弹确认框。
 
 ## Hook 点（system_server / framework）
 
@@ -31,23 +25,11 @@ LSPosed 模块，两个功能：
 
 启动确认的完整链路（system_server 内）：`OplusAppStartConfirmManager.checkStartActivityForConfirm(...)` → 早期条件（弹框 Activity 存在/拦截开关/历史防重复等）→ `isSystemAppOrSameApp`（系统 App 放行）→ `isMultiWindowMode` / `isAppOrActivityHasExist` / `skipLabActivityStartConfirm` → binder `checkAllowStartActivity`（白名单，-1 放行 / 5 拦截 / 0 弹框）。模块的最后一个 hook 绕过了系统 App 特判，其余早期条件为系统设计行为（如目标 App 已在前台不弹框、同一配对 3 次内不重复弹框）。
 
-## Hook 点（com.oplus.securitypermission 进程）
-
-| 方法 | 作用 |
-|---|---|
-| `k9.r#Q/S/W/I(Context)` | ROM 云控 XML 读取入口：启动线程、主进程更新、后台线程读取 safe_permission_list / safe_suggest_permission_list |
-| `z9.b#g()` | 快捷修复权限线程启动入口 |
-| `z9.b#h(Context,z9.a)` | 快捷修复权限实际执行（云控自动改权限的核心，兜底） |
-| `ka.c#d()` | 建议权限列表写入本地数据库 |
-| `x9.a#f()` | 预置权限配置写入 SharedPreferences |
-| `SuggestPermissionUpdateService#onHandleIntent(Intent)` | 云控触发"建议权限"更新的服务入口 |
-| `PresetPermissionUpdateService#onHandleIntent(Intent)` | 云控触发"预置权限"更新的服务入口 |
-
 ## 使用
 
-1. 安装模块 APK，在 LSPosed 中启用并将作用域勾选 **System Framework** 与 **com.oplus.securitypermission**
+1. 安装模块 APK，在 LSPosed 中启用并将作用域勾选 **System Framework**
 2. 重启
-3. 日志中搜索 `FuckCOSPM` 确认 hook 生效（`blocked k9.r.*` / `blocked z9.b.*` 等即阻断生效）
+3. 日志中搜索 `FuckCOSPM` 确认 hook 生效
 
 ## 构建
 

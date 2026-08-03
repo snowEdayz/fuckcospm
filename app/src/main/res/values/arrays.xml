@@ -2,6 +2,5 @@
 <resources>
     <string-array name="xposedscope">
         <item>android</item>
-        <item>com.oplus.securitypermission</item>
     </string-array>
 </resources>

@@ -12,7 +12,7 @@
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="Strip Alipay/Market from OPlus activity-start whitelist &amp; block ColorOS cloud quick-fix permission" />
+            android:value="Remove com.eg.android.AlipayGphone and com.heytap.market from the OPlus activity-start white list" />
         <meta-data
             android:name="xposedminversion"
             android:value="82" />
