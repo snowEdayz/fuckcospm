@@ -11,9 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://api.xposed.info/") }
     }
 }
 
-rootProject.name = "FuckCospm"
-include(":app")
+rootProject.name = "fuckcospm"
+include ':app'
