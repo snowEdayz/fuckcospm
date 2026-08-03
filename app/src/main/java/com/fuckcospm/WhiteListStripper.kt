@@ -1,6 +1,7 @@
 package com.fuckcospm
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.util.Pair
 import de.robv.android.xposed.XC_MethodHook
