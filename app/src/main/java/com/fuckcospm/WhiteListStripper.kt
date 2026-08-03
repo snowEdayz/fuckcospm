@@ -1,5 +1,6 @@
 package com.fuckcospm
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Pair
 import de.robv.android.xposed.XC_MethodHook
@@ -18,6 +19,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
  *     及预置 XML oplus_preset_activity_start_permissions.xml）
  *     -> ActivityStartWhiteList.putPresetWhiteList(String, String)
  *     -> ActivityStartWhiteList.putUserSetWhiteList(Pair, int)
+ *
+ * 并拦截匹配阶段 ActivityStartWhiteList.checkAllowStartActivity(...)：
+ * 即使目标包已在模块激活前就存在于内存缓存/持久化文件中，
+ * 白名单命中（返回 -1）也会被改写为 0（START_BLOCK），强制弹确认框。
  */
 object WhiteListStripper {
 
@@ -34,6 +39,10 @@ object WhiteListStripper {
     private const val KEY_ACTIVITY = "activity"
     private const val KEY_SRC_AND_DST = "src_and_dst"
 
+    // 匹配阶段返回值（与 OplusSecurityPermissionManager 中常量一致）
+    private const val TYPE_DEFAULT = -1    // 白名单命中，放行
+    private const val TYPE_START_BLOCK = 0 // 需要弹确认框
+
     private const val CLASS_MANAGER = "com.android.server.am.OplusSecurityPermissionManager"
     private const val CLASS_WHITE_LIST = "$CLASS_MANAGER\$ActivityStartWhiteList"
 
@@ -42,6 +51,7 @@ object WhiteListStripper {
         hookPutWhiteList(lpparam.classLoader)
         hookPutPresetWhiteList(lpparam.classLoader)
         hookPutUserSetWhiteList(lpparam.classLoader)
+        hookCheckAllowStartActivity(lpparam.classLoader)
     }
 
     // ── 入口 1：系统服务收到白名单更新（binder 调用的第一站） ──────────────
@@ -128,6 +138,34 @@ object WhiteListStripper {
             log("hooked putUserSetWhiteList")
         } catch (t: Throwable) {
             log("hook putUserSetWhiteList failed: $t")
+        }
+    }
+
+    // ── 入口 5（兜底）：匹配阶段，命中白名单且涉及目标包时强制弹框 ────────
+    private fun hookCheckAllowStartActivity(classLoader: ClassLoader) {
+        try {
+            XposedHelpers.findAndHookMethod(
+                CLASS_WHITE_LIST, classLoader, "checkAllowStartActivity",
+                String::class.java, String::class.java, Intent::class.java,
+                Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val result = param.result as? Int ?: return
+                        if (result != TYPE_DEFAULT) return
+                        val caller = param.args[0] as? String
+                        val callee = param.args[1] as? String
+                        if ((caller != null && TARGET_PACKAGES.contains(caller)) ||
+                            (callee != null && TARGET_PACKAGES.contains(callee))
+                        ) {
+                            log("white-list match blocked: caller=$caller callee=$callee -> START_BLOCK")
+                            param.result = TYPE_START_BLOCK
+                        }
+                    }
+                }
+            )
+            log("hooked checkAllowStartActivity")
+        } catch (t: Throwable) {
+            log("hook checkAllowStartActivity failed: $t")
         }
     }
 

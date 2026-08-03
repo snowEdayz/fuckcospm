@@ -15,8 +15,11 @@ LSPosed 模块：阻止 ColorOS `OplusSecurityPermissionManager` 将以下应用
 | `OplusSecurityPermissionManager$ActivityStartWhiteList#putWhiteList(Bundle,int)` | 内存缓存写入（md5 预置替换 + 用户设置） |
 | `OplusSecurityPermissionManager$ActivityStartWhiteList#putPresetWhiteList(String,String)` | 解析持久化/预置 XML 时的预置条目 |
 | `OplusSecurityPermissionManager$ActivityStartWhiteList#putUserSetWhiteList(Pair,int)` | 解析 XML 中的用户 (src,dst) 配对 |
+| `OplusSecurityPermissionManager$ActivityStartWhiteList#checkAllowStartActivity(String,String,Intent,int,int)` | 匹配阶段兜底：白名单命中且涉及目标包时强制改为 START_BLOCK（0）弹确认框 |
 
 清理范围：`src_pkg`、`dst_pkg`、`activity`（组件 `pkg/类名`）、`src_and_dst`（用户"始终允许"）。
+
+最后一个 hook 解决"模块激活前白名单已加载进内存缓存"的残留场景：即使缓存中已有目标包条目，匹配阶段也不会放行。示例配置 `example.xml` 中 `com.heytap.market` 位于 `src_pkg`、`com.eg.android.AlipayGphone` 位于 `dst_pkg`，两者均被覆盖。
 
 ## 使用
 
