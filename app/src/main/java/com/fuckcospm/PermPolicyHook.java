@@ -55,12 +55,16 @@ public final class PermPolicyHook {
                             protected void beforeHookedMethod(MethodHookParam param) {
                                 try {
                                     boolean isSys;
-                                    try {
-                                        Integer flags = (Integer) XposedHelpers.callMethod(
-                                                param.args[0], "getFlags");
-                                        isSys = (flags.intValue() & ApplicationInfo.FLAG_SYSTEM) != 0;
-                                    } catch (Throwable t) {
-                                        XposedBridge.log(TAG + ": isSystem check failed, block grant: " + t);
+                                    Object pkgSetting = param.args[1];
+                                    if (pkgSetting != null) {
+                                        try {
+                                            isSys = ((Boolean) XposedHelpers.callMethod(
+                                                    pkgSetting, "isSystem")).booleanValue();
+                                        } catch (Throwable t) {
+                                            XposedBridge.log(TAG + ": pkgSetting.isSystem failed, allow: " + t);
+                                            isSys = true;
+                                        }
+                                    } else {
                                         isSys = false;
                                     }
                                     if (!isSys) {
