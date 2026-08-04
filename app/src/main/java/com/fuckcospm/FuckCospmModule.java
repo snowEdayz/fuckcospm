@@ -1,7 +1,10 @@
 package com.fuckcospm;
 
+import android.app.AppOpsManager;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.UserHandle;
 import android.util.Pair;
@@ -138,6 +141,96 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": ospm trigger hook failed: " + t);
         }
         installMiniProgramHooks(cl);
+        try {
+            final Class<?> permPolicyClass = XposedHelpers.findClass(
+                    "com.android.server.pm.OplusRuntimePermGrantPolicyManager", cl);
+            XposedHelpers.findAndHookMethod(
+                    permPolicyClass,
+                    "getInstance",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            installPermPolicyHooks(cl);
+                        }
+                    });
+            XposedBridge.log(TAG + ": perm policy trigger hook installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": perm policy trigger hook failed: " + t);
+        }
+        installPermPolicyHooks(cl);
+    }
+
+    private static volatile boolean sPermHooksInstalled = false;
+
+    private static void installPermPolicyHooks(ClassLoader cl) {
+        if (sPermHooksInstalled) {
+            return;
+        }
+        try {
+            final Class<?> permPolicyClass = XposedHelpers.findClass(
+                    "com.android.server.pm.OplusRuntimePermGrantPolicyManager", cl);
+            final Class<?> androidPackageClass = XposedHelpers.findClass(
+                    "com.android.server.pm.pkg.AndroidPackage", cl);
+            final Class<?> packageSettingClass = XposedHelpers.findClass(
+                    "com.android.server.pm.PackageSetting", cl);
+
+            XposedHelpers.findAndHookMethod(
+                    permPolicyClass,
+                    "isPkgInGrantByWhiteList",
+                    androidPackageClass,
+                    packageSettingClass,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                boolean isSys = ((Boolean) XposedHelpers.callMethod(
+                                        param.args[0], "isSystem")).booleanValue();
+                                if (!isSys) {
+                                    param.setResult(Boolean.FALSE);
+                                }
+                            } catch (Throwable t) {
+                                XposedBridge.log(TAG + ": whitelist check failed: " + t);
+                            }
+                        }
+                    });
+
+            XposedHelpers.findAndHookMethod(
+                    permPolicyClass,
+                    "grantOplusOpsPermission",
+                    String.class,
+                    int.class,
+                    String.class,
+                    int.class,
+                    AppOpsManager.class,
+                    PackageManager.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                String pkg = (String) param.args[0];
+                                PackageManager pm = (PackageManager) param.args[5];
+                                boolean isSys = false;
+                                try {
+                                    ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                                    isSys = (ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                                } catch (PackageManager.NameNotFoundException e) {
+                                    isSys = false;
+                                }
+                                if (!isSys) {
+                                    XposedBridge.log(TAG + ": skip auto-grant op for non-system pkg="
+                                            + pkg + ", perm=" + param.args[2]);
+                                    param.setResult(null);
+                                }
+                            } catch (Throwable t) {
+                                XposedBridge.log(TAG + ": op grant skip failed: " + t);
+                            }
+                        }
+                    });
+            sPermHooksInstalled = true;
+            XposedBridge.log(TAG + ": non-system perm whitelist hooks installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": perm policy hooks failed: " + t);
+        }
     }
 
     private static volatile boolean sMiniHooksInstalled = false;
