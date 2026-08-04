@@ -11,7 +11,6 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
             ClassLoader cl = lpparam.classLoader;
             AppStartConfirmHook.install(cl);
             MiniProgramHook.install(cl);
-            PermPolicyHook.install(cl);
         }
     }
 }
