@@ -67,7 +67,7 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
                             String callerPkg = (String) param.args[5];
                             int callerUid = ((Integer) param.args[4]).intValue();
                             if (callerPkg == null || callerPkg.equals(targetPkg)
-                                    || UserHandle.getAppId(callerUid) < 10000) {
+                                    || appId(callerUid) < 10000) {
                                 return;
                             }
                             if (param.args[0] != null
@@ -78,7 +78,7 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
                                     + ", callerPkg=" + callerPkg);
                             try {
                                 int calleeUid = ((Integer) XposedHelpers.getObjectField(aInfoApp, "uid")).intValue();
-                                int userId = UserHandle.getUserId(calleeUid);
+                                int userId = userId(calleeUid);
 
                                 Intent confirmIntent = (Intent) XposedHelpers.callMethod(
                                         manager,
@@ -102,7 +102,7 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
                                         null,
                                         Integer.valueOf(0),
                                         param.args[7],
-                                        Integer.valueOf(UserHandle.getUserId(callerUid)),
+                                        Integer.valueOf(userId(callerUid)),
                                         Integer.valueOf(callerUid),
                                         Integer.valueOf(Binder.getCallingUid()));
                                 if (resolved != null) {
@@ -132,5 +132,13 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
             }
         }
         return false;
+    }
+
+    private static int appId(int uid) {
+        return ((Integer) XposedHelpers.callStaticMethod(UserHandle.class, "getAppId", Integer.valueOf(uid))).intValue();
+    }
+
+    private static int userId(int uid) {
+        return ((Integer) XposedHelpers.callStaticMethod(UserHandle.class, "getUserId", Integer.valueOf(uid))).intValue();
     }
 }
