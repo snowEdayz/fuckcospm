@@ -28,5 +28,5 @@ android {
 }
 
 dependencies {
-    compileOnly("de.robv.android.xposed:api:93")
+    compileOnly("de.robv.android.xposed:api:82")
 }
