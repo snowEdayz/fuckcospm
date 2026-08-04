@@ -12,7 +12,7 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
             AppStartConfirmHook.install(cl);
             MiniProgramHook.install(cl);
             PermPolicyHook.install(cl);
-        } else if ("com.oplusos.securitypermission".equals(lpparam.packageName)) {
+        } else if ("com.oplus.securitypermission".equals(lpparam.packageName)) {
             SecurityPermAutoGrantHook.install(lpparam.classLoader);
         }
     }
