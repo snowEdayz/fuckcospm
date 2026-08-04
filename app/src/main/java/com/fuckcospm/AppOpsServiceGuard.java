@@ -95,9 +95,11 @@ public final class AppOpsServiceGuard {
             boolean guarded = strOp == null || code >= 0 ? isGuardedOp(code) : false;
             boolean direct = isInternalDirectCall();
             if (guarded) {
+                int callingUid = android.os.Binder.getCallingUid();
                 XposedBridge.log(TAG + ": appopssvc " + method + " op=" + code + " str=" + strOp
                         + " mode=" + mode + " uid=" + uid + " pkg=" + pkg + " guarded=" + guarded
-                        + " direct=" + direct);
+                        + " direct=" + direct + " callingUid=" + callingUid);
+                XposedBridge.log(TAG + ":   svc-stack " + caller());
             }
             if (!guarded || !direct || mode != 0 || uid < 10000) {
                 return;
@@ -110,6 +112,28 @@ public final class AppOpsServiceGuard {
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": svc guard failed: " + t);
         }
+    }
+
+    private static String caller() {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        int shown = 0;
+        for (StackTraceElement e : st) {
+            String cls = e.getClassName();
+            if (cls.startsWith("com.fuckcospm") || cls.startsWith("de.robv")
+                    || cls.startsWith("android.os.Binder") || cls.startsWith("com.android.internal.os")) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(" <- ");
+            }
+            sb.append(cls).append("#").append(e.getMethodName());
+            shown++;
+            if (shown >= 6) {
+                break;
+            }
+        }
+        return sb.toString();
     }
 
     private static boolean isInternalDirectCall() {

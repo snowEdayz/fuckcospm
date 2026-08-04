@@ -203,21 +203,18 @@ public final class SecurityPermAutoGrantHook {
         int shown = 0;
         for (StackTraceElement e : st) {
             String cls = e.getClassName();
-            if (cls.startsWith("com.fuckcospm") || cls.startsWith("de.robv")) {
+            if (cls.startsWith("com.fuckcospm") || cls.startsWith("de.robv")
+                    || cls.startsWith("java.lang.Thread") || cls.startsWith("android.os.Looper")
+                    || cls.startsWith("android.os.MessageQueue")) {
                 continue;
             }
-            if (cls.startsWith("com.oplus") || cls.contains("oplus") || cls.contains("Oplus")
-                    || cls.startsWith("android.app.AppOpsManager")
-                    || cls.startsWith("android.app.Instrumentation")
-                    || cls.startsWith("android.os.Binder") || cls.startsWith("android.app.IActivityManager")) {
-                if (sb.length() > 0) {
-                    sb.append(" <- ");
-                }
-                sb.append(cls).append("#").append(e.getMethodName());
-                shown++;
-                if (shown >= 4) {
-                    break;
-                }
+            if (sb.length() > 0) {
+                sb.append(" <- ");
+            }
+            sb.append(cls).append("#").append(e.getMethodName());
+            shown++;
+            if (shown >= 10) {
+                break;
             }
         }
         return sb.toString();
