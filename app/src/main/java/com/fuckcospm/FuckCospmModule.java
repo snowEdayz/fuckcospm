@@ -63,12 +63,20 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
                             if (!isTarget(targetPkg)) {
                                 return;
                             }
+                            Object manager = param.thisObject;
+                            String callerPkg = (String) param.args[5];
+                            int callerUid = ((Integer) param.args[4]).intValue();
+                            if (callerPkg == null || callerPkg.equals(targetPkg)
+                                    || UserHandle.getAppId(callerUid) < 10000) {
+                                return;
+                            }
+                            if (param.args[0] != null
+                                    && ((Boolean) XposedHelpers.callMethod(param.args[0], "isActivityTypeHome")).booleanValue()) {
+                                return;
+                            }
                             XposedBridge.log(TAG + ": forcing confirm dialog, calleePkg=" + targetPkg
-                                    + ", callerPkg=" + param.args[5]);
+                                    + ", callerPkg=" + callerPkg);
                             try {
-                                Object manager = param.thisObject;
-                                String callerPkg = (String) param.args[5];
-                                int callerUid = ((Integer) param.args[4]).intValue();
                                 int calleeUid = ((Integer) XposedHelpers.getObjectField(aInfoApp, "uid")).intValue();
                                 int userId = UserHandle.getUserId(calleeUid);
 
