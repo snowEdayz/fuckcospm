@@ -8,7 +8,32 @@ public final class MiniProgramHook {
 
     private static final String TAG = "fuckcospm";
 
+    private static volatile boolean sHooksInstalled = false;
+
     public static void install(ClassLoader cl) {
+        try {
+            final Class<?> ospmClass = XposedHelpers.findClass(
+                    "com.android.server.am.OplusSecurityPermissionManager", cl);
+            XposedHelpers.findAndHookMethod(
+                    ospmClass,
+                    "getInstance",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            installMiniProgramHooks(cl);
+                        }
+                    });
+            XposedBridge.log(TAG + ": ospm trigger hook installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": ospm trigger hook failed: " + t);
+        }
+        installMiniProgramHooks(cl);
+    }
+
+    private static void installMiniProgramHooks(ClassLoader cl) {
+        if (sHooksInstalled) {
+            return;
+        }
         try {
             Class<?> mpcClass = XposedHelpers.findClass(
                     "com.android.server.am.OplusSecurityPermissionManager$MiniProgramController", cl);
@@ -25,6 +50,7 @@ public final class MiniProgramHook {
                             param.setResult(Boolean.FALSE);
                         }
                     });
+            sHooksInstalled = true;
             XposedBridge.log(TAG + ": mini-program white list bypass installed");
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": mini-program hook failed: " + t);

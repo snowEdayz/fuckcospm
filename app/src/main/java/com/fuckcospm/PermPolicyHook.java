@@ -12,7 +12,30 @@ public final class PermPolicyHook {
 
     private static final String TAG = "fuckcospm";
 
+    private static volatile boolean sWhitelistCheckHooked = false;
+    private static volatile boolean sOpGrantHooked = false;
+
     public static void install(ClassLoader cl) {
+        try {
+            final Class<?> permPolicyClass = XposedHelpers.findClass(
+                    "com.android.server.pm.OplusRuntimePermGrantPolicyManager", cl);
+            XposedHelpers.findAndHookMethod(
+                    permPolicyClass,
+                    "getInstance",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            installPermPolicyHooks(cl);
+                        }
+                    });
+            XposedBridge.log(TAG + ": perm policy trigger hook installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": perm policy trigger hook failed: " + t);
+        }
+        installPermPolicyHooks(cl);
+    }
+
+    private static void installPermPolicyHooks(ClassLoader cl) {
         try {
             final Class<?> permPolicyClass = XposedHelpers.findClass(
                     "com.android.server.pm.OplusRuntimePermGrantPolicyManager", cl);
@@ -21,7 +44,7 @@ public final class PermPolicyHook {
             final Class<?> packageSettingClass = XposedHelpers.findClass(
                     "com.android.server.pm.PackageSetting", cl);
 
-            try {
+            if (!sWhitelistCheckHooked) {
                 XposedHelpers.findAndHookMethod(
                         permPolicyClass,
                         "isPkgInGrantByWhiteList",
@@ -41,12 +64,10 @@ public final class PermPolicyHook {
                                 }
                             }
                         });
+                sWhitelistCheckHooked = true;
                 XposedBridge.log(TAG + ": non-system whitelist check hooked");
-            } catch (Throwable t) {
-                XposedBridge.log(TAG + ": whitelist check hook failed: " + t);
             }
-
-            try {
+            if (!sOpGrantHooked) {
                 XposedHelpers.findAndHookMethod(
                         permPolicyClass,
                         "grantOplusOpsPermission",
@@ -79,9 +100,8 @@ public final class PermPolicyHook {
                                 }
                             }
                         });
+                sOpGrantHooked = true;
                 XposedBridge.log(TAG + ": non-system op grant hooked");
-            } catch (Throwable t) {
-                XposedBridge.log(TAG + ": op grant hook failed: " + t);
             }
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": perm policy hooks failed: " + t);
