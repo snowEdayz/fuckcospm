@@ -28,8 +28,11 @@ jobs:
         with:
           gradle-version: 8.10
 
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.10 --distribution-type bin
+
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK to pre-release
         uses: ncipollo/release-action@v1
