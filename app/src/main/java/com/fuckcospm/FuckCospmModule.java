@@ -116,9 +116,56 @@ public class FuckCospmModule implements IXposedHookLoadPackage {
                             }
                         }
                     });
-            XposedBridge.log(TAG + ": hook installed");
+            XposedBridge.log(TAG + ": app-start hook installed");
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": hook install failed: " + t);
+            XposedBridge.log(TAG + ": app-start hook failed: " + t);
+        }
+
+        try {
+            final Class<?> ospmClass = XposedHelpers.findClass(
+                    "com.android.server.am.OplusSecurityPermissionManager", cl);
+            XposedHelpers.findAndHookMethod(
+                    ospmClass,
+                    "getInstance",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            installMiniProgramHooks(cl);
+                        }
+                    });
+            XposedBridge.log(TAG + ": ospm trigger hook installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": ospm trigger hook failed: " + t);
+        }
+        installMiniProgramHooks(cl);
+    }
+
+    private static volatile boolean sMiniHooksInstalled = false;
+
+    private static void installMiniProgramHooks(ClassLoader cl) {
+        if (sMiniHooksInstalled) {
+            return;
+        }
+        try {
+            Class<?> mpcClass = XposedHelpers.findClass(
+                    "com.android.server.am.OplusSecurityPermissionManager$MiniProgramController", cl);
+            XposedHelpers.findAndHookMethod(
+                    mpcClass,
+                    "isInWhiteList",
+                    String.class,
+                    String.class,
+                    String.class,
+                    int.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            param.setResult(Boolean.FALSE);
+                        }
+                    });
+            sMiniHooksInstalled = true;
+            XposedBridge.log(TAG + ": mini-program white list bypass installed");
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": mini-program hook failed: " + t);
         }
     }
 
