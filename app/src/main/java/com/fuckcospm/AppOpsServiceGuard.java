@@ -55,15 +55,17 @@ public final class AppOpsServiceGuard {
         XposedBridge.log(TAG + ": appops-service guard installed");
     }
 
-    private static void hook(final Class<?> svc, final String method, Class<?>[] sig, final String label) {
+    private static void hook(final Class<?> svc, final String method, final Class<?>[] sig, final String label) {
         try {
-            XposedHelpers.findAndHookMethod(svc, method, sig,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            blockAutoGrant(param, label);
-                        }
-                    });
+            Object[] args = new Object[sig.length + 1];
+            System.arraycopy(sig, 0, args, 0, sig.length);
+            args[sig.length] = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    blockAutoGrant(param, label);
+                }
+            };
+            XposedHelpers.findAndHookMethod(svc, method, args);
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": hook AppOpsService." + method + " failed: " + t);
         }
