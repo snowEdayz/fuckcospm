@@ -44,7 +44,7 @@ public final class SecurityPermAutoGrantHook {
                     new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
-                            blockAutoGrant(param, "setMode(int)", 0, null);
+                            blockAutoGrant(param, "setMode(int)", ((Integer) param.args[0]).intValue(), null);
                         }
                     });
         } catch (Throwable t) {
@@ -63,7 +63,7 @@ public final class SecurityPermAutoGrantHook {
                     new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
-                            blockAutoGrant(param, "setUidMode(int)", 0, null);
+                            blockAutoGrant(param, "setUidMode(int)", ((Integer) param.args[0]).intValue(), null);
                         }
                     });
         } catch (Throwable t) {
@@ -206,7 +206,8 @@ public final class SecurityPermAutoGrantHook {
             if (cls.startsWith("com.fuckcospm") || cls.startsWith("de.robv")) {
                 continue;
             }
-            if (cls.startsWith("com.oplus") || cls.startsWith("android.app.AppOpsManager")
+            if (cls.startsWith("com.oplus") || cls.contains("oplus") || cls.contains("Oplus")
+                    || cls.startsWith("android.app.AppOpsManager")
                     || cls.startsWith("android.app.Instrumentation")
                     || cls.startsWith("android.os.Binder") || cls.startsWith("android.app.IActivityManager")) {
                 if (sb.length() > 0) {

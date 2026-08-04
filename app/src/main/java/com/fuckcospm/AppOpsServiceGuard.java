@@ -25,6 +25,7 @@ public final class AppOpsServiceGuard {
         }
         Class<?> serviceClass = null;
         String[] candidates = {
+                "com.android.server.appop.AppOpsService",
                 "com.android.server.AppOpsService",
                 "com.android.server.appop.OplusAppOpsService",
                 "com.android.server.oplus.appop.OplusAppOpsService"
