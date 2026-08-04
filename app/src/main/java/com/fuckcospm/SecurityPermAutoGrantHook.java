@@ -123,7 +123,7 @@ public final class SecurityPermAutoGrantHook {
             if (!guarded || mode != 0 || uid < 10000) {
                 return;
             }
-            if (!isSystemApp(pkg)) {
+            if (!isSystemApp(param, pkg)) {
                 XposedBridge.log(TAG + ": block auto-grant op=" + code + " pkg=" + pkg + " uid=" + uid
                         + " via " + method);
                 param.setResult(null);
@@ -133,17 +133,12 @@ public final class SecurityPermAutoGrantHook {
         }
     }
 
-    private static boolean isSystemApp(String pkg) {
+    private static boolean isSystemApp(MethodHookParam param, String pkg) {
         if (pkg == null) {
             return false;
         }
         try {
-            Object activityThread = XposedHelpers.callStaticMethod(
-                    android.app.ActivityThread.class, "currentActivityThread");
-            if (activityThread == null) {
-                return false;
-            }
-            Context ctx = (Context) XposedHelpers.callMethod(activityThread, "getSystemContext");
+            Context ctx = (Context) XposedHelpers.getObjectField(param.thisObject, "mContext");
             if (ctx == null) {
                 return false;
             }
