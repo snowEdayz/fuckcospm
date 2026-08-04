@@ -1,0 +1,48 @@
+name: Build Debug APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK to pre-release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: debug-build
+          name: Debug Build
+          body: |
+            每次 push 自动构建的 debug APK（更新同一个 pre-release）。
+            模块: fuckcospm
+            作用域: android (system_server)
+            目标: 移除 com.heytap.market / com.nearme.instant.platform 被唤起时的白名单，强制弹窗询问
+          prerelease: true
+          allowUpdates: true
+          replacesArtifacts: true
+          artifacts: app/build/outputs/apk/debug/app-debug.apk
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,18 +1,7 @@
-# Gradle
-.gradle/
 build/
-
-# Android
-*.apk
-*.aab
-local.properties
-captures/
-
-# IDE
+.gradle/
 .idea/
+local.properties
 *.iml
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
+.kotlin/
+captures/
