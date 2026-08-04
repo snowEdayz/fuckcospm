@@ -54,9 +54,23 @@ public final class PermPolicyHook {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam param) {
                                 try {
-                                    boolean isSys = ((Boolean) XposedHelpers.callMethod(
-                                            param.args[0], "isSystem")).booleanValue();
+                                    boolean isSys;
+                                    try {
+                                        Integer flags = (Integer) XposedHelpers.callMethod(
+                                                param.args[0], "getFlags");
+                                        isSys = (flags.intValue() & ApplicationInfo.FLAG_SYSTEM) != 0;
+                                    } catch (Throwable t) {
+                                        XposedBridge.log(TAG + ": isSystem check failed, block grant: " + t);
+                                        isSys = false;
+                                    }
                                     if (!isSys) {
+                                        String pkg = null;
+                                        try {
+                                            pkg = (String) XposedHelpers.callMethod(
+                                                    param.args[0], "getPackageName");
+                                        } catch (Throwable ignored) {
+                                        }
+                                        XposedBridge.log(TAG + ": block whitelist grant for non-system pkg=" + pkg);
                                         param.setResult(Boolean.FALSE);
                                     }
                                 } catch (Throwable t) {
