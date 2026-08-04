@@ -24,6 +24,16 @@ public final class SecurityPermAutoGrantHook {
         if (sInstalled) {
             return;
         }
+        hookSetModeInt();
+        hookSetUidModeInt();
+        hookSetModeString();
+        hookSetUidModeString();
+        hookSetUidModeFromPermission();
+        sInstalled = true;
+        XposedBridge.log(TAG + ": securityperm auto-grant guard installed");
+    }
+
+    private static void hookSetModeInt() {
         try {
             XposedHelpers.findAndHookMethod(
                     AppOpsManager.class,
@@ -38,6 +48,13 @@ public final class SecurityPermAutoGrantHook {
                             blockAutoGrant(param, "setMode(int)", 0, null);
                         }
                     });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": hook setMode(int) failed: " + t);
+        }
+    }
+
+    private static void hookSetUidModeInt() {
+        try {
             XposedHelpers.findAndHookMethod(
                     AppOpsManager.class,
                     "setUidMode",
@@ -50,6 +67,13 @@ public final class SecurityPermAutoGrantHook {
                             blockAutoGrant(param, "setUidMode(int)", 0, null);
                         }
                     });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": hook setUidMode(int) failed: " + t);
+        }
+    }
+
+    private static void hookSetModeString() {
+        try {
             XposedHelpers.findAndHookMethod(
                     AppOpsManager.class,
                     "setMode",
@@ -65,6 +89,13 @@ public final class SecurityPermAutoGrantHook {
                             blockAutoGrant(param, "setMode(str)", code == null ? -1 : code.intValue(), opStr);
                         }
                     });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": hook setMode(str) failed: " + t);
+        }
+    }
+
+    private static void hookSetUidModeString() {
+        try {
             XposedHelpers.findAndHookMethod(
                     AppOpsManager.class,
                     "setUidMode",
@@ -79,6 +110,13 @@ public final class SecurityPermAutoGrantHook {
                             blockAutoGrant(param, "setUidMode(str)", code == null ? -1 : code.intValue(), opStr);
                         }
                     });
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": hook setUidMode(str) failed: " + t);
+        }
+    }
+
+    private static void hookSetUidModeFromPermission() {
+        try {
             XposedHelpers.findAndHookMethod(
                     AppOpsManager.class,
                     "setUidModeFromPermission",
@@ -93,10 +131,8 @@ public final class SecurityPermAutoGrantHook {
                             blockAutoGrant(param, "setUidModeFromPermission", code == null ? -1 : code.intValue(), permission);
                         }
                     });
-            sInstalled = true;
-            XposedBridge.log(TAG + ": securityperm auto-grant guard installed");
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": securityperm auto-grant guard failed: " + t);
+            XposedBridge.log(TAG + ": hook setUidModeFromPermission failed: " + t);
         }
     }
 
