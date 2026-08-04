@@ -28,7 +28,6 @@ public final class SecurityPermAutoGrantHook {
         hookSetUidModeInt();
         hookSetModeString();
         hookSetUidModeString();
-        hookSetUidModeFromPermission();
         sInstalled = true;
         XposedBridge.log(TAG + ": securityperm auto-grant guard installed");
     }
@@ -115,27 +114,6 @@ public final class SecurityPermAutoGrantHook {
         }
     }
 
-    private static void hookSetUidModeFromPermission() {
-        try {
-            XposedHelpers.findAndHookMethod(
-                    AppOpsManager.class,
-                    "setUidModeFromPermission",
-                    String.class,
-                    int.class,
-                    int.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            String permission = (String) param.args[0];
-                            Integer code = permissionToOp(permission);
-                            blockAutoGrant(param, "setUidModeFromPermission", code == null ? -1 : code.intValue(), permission);
-                        }
-                    });
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": hook setUidModeFromPermission failed: " + t);
-        }
-    }
-
     private static void blockAutoGrant(MethodHookParam param, String method, int code, String opStr) {
         try {
             boolean guarded;
@@ -153,10 +131,16 @@ public final class SecurityPermAutoGrantHook {
                     break;
                 }
             }
+            String callerChain = caller();
             XposedBridge.log(TAG + ": appops " + method + " op=" + code + " str=" + opStr
                     + " mode=" + mode + " uid=" + uid + " pkg=" + pkg + " guarded=" + guarded
-                    + " caller=" + caller());
+                    + " caller=" + callerChain);
             if (!guarded || mode != 0 || uid < 10000) {
+                return;
+            }
+            if (isManualUiCaller(callerChain)) {
+                XposedBridge.log(TAG + ": manual ui op=" + code + " pkg=" + pkg + " uid=" + uid
+                        + " allowed");
                 return;
             }
             if (!isSystemApp(param, pkg)) {
@@ -167,6 +151,26 @@ public final class SecurityPermAutoGrantHook {
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": guard failed: " + t);
         }
+    }
+
+    private static boolean isManualUiCaller(String callerChain) {
+        if (callerChain == null || callerChain.isEmpty()) {
+            return false;
+        }
+        String head = callerChain;
+        int idx = head.indexOf(" <- ");
+        if (idx > 0) {
+            head = head.substring(0, idx);
+        }
+        int hashIdx = head.indexOf('#');
+        String cls = hashIdx > 0 ? head.substring(0, hashIdx) : head;
+        String meth = hashIdx > 0 ? head.substring(hashIdx + 1) : "";
+        if (cls.contains(".permission.ui.") || cls.contains(".ui.handheld.")) {
+            return true;
+        }
+        return meth.equals("onClick") || meth.equals("onCheckedChanged")
+                || meth.equals("onItemSelected") || meth.equals("onOptionsItemSelected")
+                || meth.equals("onPreferenceChange") || meth.equals("onPreferenceClick");
     }
 
     private static boolean isSystemApp(MethodHookParam param, String pkg) {
@@ -193,22 +197,18 @@ public final class SecurityPermAutoGrantHook {
         }
     }
 
-    private static Integer permissionToOp(String permission) {
-        try {
-            return (Integer) XposedHelpers.callStaticMethod(AppOpsManager.class, "permissionToOpCode", permission);
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
     private static String caller() {
         StackTraceElement[] st = Thread.currentThread().getStackTrace();
         StringBuilder sb = new StringBuilder();
         int shown = 0;
         for (StackTraceElement e : st) {
             String cls = e.getClassName();
+            if (cls.startsWith("com.fuckcospm") || cls.startsWith("de.robv")) {
+                continue;
+            }
             if (cls.startsWith("com.oplus") || cls.startsWith("android.app.AppOpsManager")
-                    || cls.startsWith("de.robv") || cls.startsWith("com.fuckcospm")) {
+                    || cls.startsWith("android.app.Instrumentation")
+                    || cls.startsWith("android.os.Binder") || cls.startsWith("android.app.IActivityManager")) {
                 if (sb.length() > 0) {
                     sb.append(" <- ");
                 }
